@@ -1,60 +1,99 @@
 import { NavigationMenu } from "@/components/navigationMenu";
 
+// Debug flag for logging
+const DEBUG = true;
+
+function log(...args: any[]) {
+  if (DEBUG) console.log(...args);
+}
+
+// Helper function to inject CSS into the Shadow DOM
+function injectShadowStyles(shadowRoot: ShadowRoot) {
+  log("Injecting styles into shadow DOM...");
+  const style = document.createElement("style");
+  style.textContent = `
+    #vpHamburger {
+      padding-left: 5px;
+      cursor: pointer;
+    }
+    #vpNavigationMenu {
+      display: none;
+      position: absolute;
+      background-color: white;
+      box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 10px;
+      z-index: 1000;
+      width: 250px;
+      border: 1px solid #ccc;
+      margin: 0;
+      list-style: none;
+    }
+  `;
+  shadowRoot.appendChild(style);
+}
+
+// Helper function to traverse shadow DOM
+function queryShadowRoot(selector: string, shadowHost: Element): Element | null {
+  log(`Querying shadow DOM for selector: ${selector}`);
+  const shadowRoot = shadowHost.shadowRoot as ShadowRoot;
+  return shadowRoot ? shadowRoot.querySelector(selector) : null;
+}
+
+// Toggle navigation menu visibility
+function toggleMenu(vpHamburger: HTMLElement, shadowRoot: ShadowRoot) {
+  log("Hamburger icon clicked.");
+  const navMenu = shadowRoot.querySelector("#vpNavigationMenu") as HTMLElement;
+  if (navMenu) {
+    const rect = vpHamburger.getBoundingClientRect();
+    navMenu.style.top = `${rect.bottom}px`;
+    navMenu.style.left = `0px`;
+    navMenu.style.display = navMenu.style.display === "block" ? "none" : "block";
+    log(`Toggled navigation menu visibility: ${navMenu.style.display}`);
+  } else {
+    log("Navigation menu not found.");
+  }
+}
+
+// Close the menu when a link is clicked
+function closeMenuOnClick(links: NodeListOf<Element>, shadowRoot: ShadowRoot) {
+  links.forEach(link => {
+    link.addEventListener("click", () => {
+      const navMenu = shadowRoot.querySelector("#vpNavigationMenu") as HTMLElement;
+      if (navMenu) {
+        navMenu.style.display = "none";
+        log("Navigation menu closed after clicking a link.");
+      }
+    });
+  });
+}
+
+// Close the menu when the page scrolls
+function closeMenuOnScroll(shadowRoot: ShadowRoot) {
+  window.addEventListener("scroll", () => {
+    const navMenu = shadowRoot.querySelector("#vpNavigationMenu") as HTMLElement;
+    if (navMenu && navMenu.style.display === "block") {
+      navMenu.style.display = "none";
+      log("Navigation menu closed due to page scroll.");
+    }
+  });
+}
+
 export default defineContentScript({
   matches: ["*://suttacentral.net/*"],
   main() {
-    console.log("Active on SuttaCentral.net");
+    log("Active on SuttaCentral.net");
 
-    // Helper function to inject CSS into the Shadow DOM
-    function injectShadowStyles(shadowRoot: ShadowRoot) {
-      console.log("Injecting styles into shadow DOM...");
-      const style = document.createElement("style");
-      style.textContent = `
-        #vpHamburger {
-          padding-left: 5px;
-          cursor: pointer;
-        }
-        #vpNavigationMenu {
-          display: none;
-          position: absolute;
-          background-color: white;
-          box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
-          padding: 10px;
-          z-index: 1000;
-          width: 250px;
-          border: 1px solid #ccc; /* Add border for visibility */
-          /* Reset styles */
-          margin: 0;
-          list-style: none; /* Reset list styles */
-        }
-      `;
-      shadowRoot.appendChild(style);
-    }
-
-    // Helper function to traverse shadow DOM
-    function queryShadowRoot(selector: string, shadowHost: Element): Element | null {
-      console.log(`Querying shadow DOM for selector: ${selector}`);
-      const shadowRoot = shadowHost.shadowRoot as ShadowRoot; // Type assertion
-      return shadowRoot ? shadowRoot.querySelector(selector) : null;
-    }
-
-    // Define the shadow host selector
     const shadowHostSelector = "#breadCrumb";
-
-    // Use MutationObserver to detect changes in the DOM
-    const observer = new MutationObserver((mutations: MutationRecord[]) => {
-      console.log("Mutation observed...");
-      const shadowHost = document.querySelector(shadowHostSelector) as Element; // Type assertion
+    const observer = new MutationObserver(() => {
+      const shadowHost = document.querySelector(shadowHostSelector) as Element;
 
       if (shadowHost) {
-        console.log("Shadow host found:", shadowHost);
+        log("Shadow host found:", shadowHost);
 
         const topBarHomeLink = queryShadowRoot(".top-bar-home-link", shadowHost);
-
         if (topBarHomeLink && !document.querySelector("#vpHamburger")) {
-          console.log("Top bar home link found and hamburger icon doesn't exist yet.");
+          log("Top bar home link found and hamburger icon doesn't exist yet.");
 
-          // Create a new div element for the hamburger icon
           const vpHamburger = document.createElement("div");
           vpHamburger.id = "vpHamburger";
           vpHamburger.innerHTML = `
@@ -64,76 +103,32 @@ export default defineContentScript({
               <rect y="26" width="30" height="4" rx="2" fill="white" />
             </svg>
           `;
-          console.log("Hamburger icon created.");
 
-          // Inject styles into the shadow DOM
           injectShadowStyles(shadowHost.shadowRoot as ShadowRoot);
-
-          // Insert the hamburger icon into the DOM
           topBarHomeLink.insertAdjacentElement("afterbegin", vpHamburger);
-          console.log("Hamburger icon inserted into the DOM.");
 
-          // Create a shadow root for the navigation menu
           const menuContainer = document.createElement("div");
           const shadowRoot = menuContainer.attachShadow({ mode: "open" });
 
-          // Create the navigation menu container with shadow root
           const vpNavigationMenu = document.createElement("div");
           vpNavigationMenu.id = "vpNavigationMenu";
           vpNavigationMenu.innerHTML = NavigationMenu();
-          injectShadowStyles(shadowRoot); // Inject styles into the shadow root
+          injectShadowStyles(shadowRoot);
 
-          shadowRoot.appendChild(vpNavigationMenu); // Append menu to shadow root
-
-          // Insert the menu container immediately after the hamburger icon
+          shadowRoot.appendChild(vpNavigationMenu);
           vpHamburger.insertAdjacentElement("afterend", menuContainer);
-          console.log("Navigation menu added to the page.");
+          log("Navigation menu added to the page.");
 
-          // Toggle navigation menu visibility on click
-          vpHamburger.addEventListener("click", () => {
-            console.log("Hamburger icon clicked.");
-            const navMenu = shadowRoot.querySelector("#vpNavigationMenu") as HTMLElement;
-            if (navMenu) {
-              // Calculate the position of the hamburger icon and set the menu position
-              const rect = vpHamburger.getBoundingClientRect();
-              navMenu.style.top = `${rect.bottom}px`; // Place the menu right below the hamburger icon
-              navMenu.style.left = `0px`; // Align the menu to the left side of the page
-
-              // Toggle visibility
-              navMenu.style.display = navMenu.style.display === "block" ? "none" : "block";
-              console.log(`Toggled navigation menu visibility: ${navMenu.style.display}`);
-            } else {
-              console.log("Navigation menu not found.");
-            }
-          });
-
-          // Add event listener to close the menu when clicking a link
-          const links = shadowRoot.querySelectorAll("#vpNavigationMenu a");
-          links.forEach(link => {
-            link.addEventListener("click", () => {
-              const navMenu = shadowRoot.querySelector("#vpNavigationMenu") as HTMLElement;
-              if (navMenu) {
-                navMenu.style.display = "none"; // Close the menu
-                console.log("Navigation menu closed after clicking a link.");
-              }
-            });
-          });
-
-          // Add event listener to close the menu on page scroll
-          window.addEventListener("scroll", () => {
-            const navMenu = shadowRoot.querySelector("#vpNavigationMenu") as HTMLElement;
-            if (navMenu && navMenu.style.display === "block") {
-              navMenu.style.display = "none"; // Close the menu
-              console.log("Navigation menu closed due to page scroll.");
-            }
-          });
+          vpHamburger.addEventListener("click", () => toggleMenu(vpHamburger, shadowRoot));
+          closeMenuOnClick(shadowRoot.querySelectorAll("#vpNavigationMenu a"), shadowRoot);
+          closeMenuOnScroll(shadowRoot);
 
           observer.disconnect();
         } else {
-          console.log("Top bar home link not found or hamburger icon already exists.");
+          log("Top bar home link not found or hamburger icon already exists.");
         }
       } else {
-        console.log("Shadow host not found.");
+        log("Shadow host not found.");
       }
     });
 
